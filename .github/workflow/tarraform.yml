@@ -1,0 +1,63 @@
+name: "vprofile IAC"
+on:
+  push:
+    branches:
+      - main
+      - stage
+    path:
+      - terraform/**
+  pull_request:     
+    branches:
+      - main  ##pull request normally given to the branches which is locked, where commit canot be donr by npormal people
+    path:
+      - terraform/**
+
+env:
+  #credentials for deployment to AWS
+  AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
+  AWS_SECRET_ACCESS_KEY_ID: ${{secrets.AWS_SECRET_ACCESS_KEY}}
+  #s3 bucket for the terraform satate file
+  BUCKET_TF_STATE:  ${secrets.BUCKET_TF_STATE}
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: vprofile-eks
+
+jobs:
+  terraform:
+  name: "apply terraform code changes"
+  runs-on: ubuntu-latest    ##basicaly git-hub actions create a container and carries the foolowing actions
+  defaults:    ## deafulats allows the following steps tocarried out on specified env.
+    run:
+      shell: bash
+      working-directory: ./terraform
+  steps:
+    - name: "checkout the source code"
+      uses: actions/checkout@v4
+
+    - name: setup terraform with specified version on the runner
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.6.3
+
+    - name: terraform init
+      id: init                  ##we can use id to refernce in the upcoming tasks
+      run: terraform init -backend-config="bucket=$bucket_TF_STATE"
+
+    - name: terraform format checkig
+      id: fmt
+      run: terraform fmt -check ## it will not corrects format, it just checks for the format, if the format is not cerreect it fails the work flow  
+
+    - name: terraform validation
+      id: validate
+      run: terraform validate   ##checks for the syntax of the code 
+
+    - name: terraform plan
+      id: plan
+      run: trerraform plan -no-colour -input=false  -out planfile 
+      continue-on-error: true
+
+    - name: terraform status
+      if: step.plan.outcome == "failure"
+      run: exit1  ## this terminates the execution process 
+
+
+
