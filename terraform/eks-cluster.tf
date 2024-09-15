@@ -20,7 +20,7 @@ module "eks" {
 
       instance_types = ["t3.small"]
 
-      min_size     = 1
+      min_size     = 1 #these are autoscaling information#
       max_size     = 3
       desired_size = 2
     }

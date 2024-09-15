@@ -1,0 +1,82 @@
+name: "vprofile IAC"
+on:                      #we specify the events here, i.e. when we need this work flow to be triggered  
+  push:
+    branches:
+      - main
+      - stage
+    paths:
+      - terraform/**
+  pull_request:     ##pull request normally given to the branches which is locked, where commit canot be donr by npormal people
+    branches:
+      - main
+    paths:
+      - terraform/**
+
+env:                                                    ### here basically the secrets whichwe have stored in project, gets exported to the specified anv. keys
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }} 
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  BUCKET_TF_STATE: ${{ secrets.BUCKET_TF_STATE }}
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: vprofile-eks
+
+jobs:
+  terraform:
+    name: "apply terraform code changes"
+    runs-on: ubuntu-latest    ##basicaly git-hub actions create a container and carries the foolowing actions
+    defaults:            ## deafulats allows the steps to be carried out on specified env.
+      run:
+        shell: bash
+        working-directory: ./terraform
+    steps:
+      - name: "checkout the source code"
+        uses: actions/checkout@v4
+
+      - name: "setup terraform with the specified version on the runner"
+        uses: hashicorp/setup-terraform@v2
+      # with:
+       #  terraform_version: 1.6.3
+
+      - name: "terraform init"
+        id: init             ##we can use id to refernce in the upcoming tasks
+        run: terraform init -backend-config="bucket=${{ secrets.BUCKET_TF_STATE }}"
+
+      - name: "terraform format checking"
+        id: fmt
+        run: terraform fmt -check   ## it will not corrects format, it just checks for the format, if the format is not cerreect it fails the work flow  
+
+      - name: "terraform validation"
+        id: validate
+        run: terraform validate      ##checks for the syntax of the code 
+
+      - name: "terraform plan"
+        id: plan
+        run: terraform plan -no-color -input=false -out planfile   ##the planned content gets outputted ti the file called planfile 
+        continue-on-error: true
+
+      - name: "terraform status"
+        if: steps.plan.outcome == 'failure'
+        run: exit 1              ## this terminates the execution process 
+
+      - name: "terraform status"
+        id: apple
+        if: github.ref == "refs/heads/main" && github.event_name == 'push'
+        run: terraform apply -auto-approve -input=false -parallelism=1 planfile 
+      
+      - name: configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+            AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            AWS_REGION: us-east-1
+
+      - name: get kube_config_file
+        id: getconfig
+        if: steps.apple.outcome == 'success'
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }} 
+
+      - name: "Install Ingress controller"
+        if: steps.apple.outcome == 'success' && steps.getconfig.outcome == 'success'
+        run: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.1.3/deploy/static/provider/aws/deploy.yaml
+
+###we need ingress controller once the cluster got created, so wespecified that in lasr step
+###as we need kubeconfig file to run kubectl command, last 2nd,3rd steps we have configured aws authentication and downloading kubeonfig fie respectively 
