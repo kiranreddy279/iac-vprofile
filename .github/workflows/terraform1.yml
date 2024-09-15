@@ -1,5 +1,5 @@
 name: "vprofile IAC"
-on:
+on:                      #we specify the events here, i.e. when we need this work flow to be triggered  
   push:
     branches:
       - main
@@ -12,8 +12,8 @@ on:
     paths:
       - terraform/**
 
-env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+env:                                                    ### here basically the secrets whichwe have stored in project, gets exported to the specified anv. keys
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }} 
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   BUCKET_TF_STATE: ${{ secrets.BUCKET_TF_STATE }}
   AWS_REGION: us-east-1
